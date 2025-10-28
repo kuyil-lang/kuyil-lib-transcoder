@@ -1,0 +1,209 @@
+#!/usr/bin/env kuyil
+
+# Kuyil Integration for Transcoder Utils Library
+# This file demonstrates how to use the transcoder utilities from Kuyil
+
+# Load the transcoder library
+load_library("./libtranscoder_utils.so")
+
+# Test GZIP compression
+function test_compression() {
+    print("=== Kuyil Transcoder Utils Demo ===")
+    
+    let test_data = "Hello from Kuyil! This is a test string for compression and encoding."
+    print("Original data: " + test_data)
+    print("Original size: " + length(test_data) + " bytes")
+    
+    # Compress with GZIP
+    let compressed = gzip_compress(test_data, length(test_data), COMPRESS_LEVEL_DEFAULT)
+    if (compressed != null) {
+        print("Compressed successfully!")
+        let comp_size = get_compressed_size(compressed)
+        print("Compressed size: " + comp_size + " bytes")
+        
+        let ratio = get_compression_ratio(length(test_data), comp_size)
+        print("Compression ratio: " + (ratio * 100) + "%")
+        
+        # Decompress
+        let decompressed = gzip_decompress(compressed)
+        if (decompressed == test_data) {
+            print("✓ Compression/decompression successful!")
+        } else {
+            print("✗ Decompression failed!")
+        }
+    } else {
+        print("✗ Compression failed: " + transcoder_get_last_error())
+    }
+}
+
+# Test URL encoding
+function test_url_encoding() {
+    print("\n=== URL Encoding Test ===")
+    
+    let url_data = "Hello World! Test@example.com?param=value&other=data"
+    print("Original URL: " + url_data)
+    
+    let encoded = url_encode(url_data)
+    if (encoded != null) {
+        print("Encoded URL: " + encoded)
+        
+        let decoded = url_decode(encoded)
+        if (decoded == url_data) {
+            print("✓ URL encoding/decoding successful!")
+        } else {
+            print("✗ URL decoding failed!")
+        }
+    } else {
+        print("✗ URL encoding failed: " + transcoder_get_last_error())
+    }
+}
+
+# Test HTML encoding
+function test_html_encoding() {
+    print("\n=== HTML Encoding Test ===")
+    
+    let html_data = "Hello <world> & \"friends\"!"
+    print("Original HTML: " + html_data)
+    
+    let encoded = html_encode(html_data)
+    if (encoded != null) {
+        print("Encoded HTML: " + encoded)
+        print("✓ HTML encoding successful!")
+    } else {
+        print("✗ HTML encoding failed: " + transcoder_get_last_error())
+    }
+}
+
+# Test hex encoding
+function test_hex_encoding() {
+    print("\n=== Hex Encoding Test ===")
+    
+    let data = "Hello, Kuyil!"
+    print("Original data: " + data)
+    
+    let hex = hex_encode(data, length(data))
+    if (hex != null) {
+        print("Hex encoded: " + hex)
+        
+        let decoded = hex_decode(hex)
+        if (decoded == data) {
+            print("✓ Hex encoding/decoding successful!")
+        } else {
+            print("✗ Hex decoding failed!")
+        }
+    } else {
+        print("✗ Hex encoding failed: " + transcoder_get_last_error())
+    }
+}
+
+# Test CRC32 checksum
+function test_crc32() {
+    print("\n=== CRC32 Checksum Test ===")
+    
+    let data = "Hello, Kuyil!"
+    print("Data: " + data)
+    
+    let crc = crc32_checksum(data, length(data))
+    print("CRC32: 0x" + hex(crc))
+    print("✓ CRC32 checksum calculated!")
+}
+
+# Test file operations
+function test_file_operations() {
+    print("\n=== File Operations Test ===")
+    
+    let test_file = "/tmp/kuyil_test.txt"
+    let gzip_file = "/tmp/kuyil_test.gz"
+    let restored_file = "/tmp/kuyil_restored.txt"
+    
+    let test_content = "This is a test file created by Kuyil for compression testing."
+    
+    # Write test file
+    if (write_file(test_file, test_content)) {
+        print("Test file created: " + test_file)
+        
+        # Compress file
+        if (gzip_compress_file(test_file, gzip_file, COMPRESS_LEVEL_DEFAULT)) {
+            print("File compressed: " + gzip_file)
+            
+            # Get file sizes
+            let original_size = file_size(test_file)
+            let compressed_size = file_size(gzip_file)
+            let ratio = get_compression_ratio(original_size, compressed_size)
+            
+            print("Original size: " + original_size + " bytes")
+            print("Compressed size: " + compressed_size + " bytes") 
+            print("Compression ratio: " + (ratio * 100) + "%")
+            
+            # Decompress file
+            if (gzip_decompress_file(gzip_file, restored_file)) {
+                print("File decompressed: " + restored_file)
+                
+                let restored_content = read_file(restored_file)
+                if (restored_content == test_content) {
+                    print("✓ File compression/decompression successful!")
+                } else {
+                    print("✗ Restored file content doesn't match!")
+                }
+                
+                # Cleanup
+                delete_file(restored_file)
+            } else {
+                print("✗ File decompression failed: " + transcoder_get_last_error())
+            }
+            
+            delete_file(gzip_file)
+        } else {
+            print("✗ File compression failed: " + transcoder_get_last_error())
+        }
+        
+        delete_file(test_file)
+    } else {
+        print("✗ Failed to create test file")
+    }
+}
+
+# Test different compression levels
+function test_compression_levels() {
+    print("\n=== Compression Levels Test ===")
+    
+    let data = "This is a longer test string to better demonstrate the differences between compression levels. " +
+              "The more data we have, the more visible the compression ratio differences become. " +
+              "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+    
+    print("Testing data size: " + length(data) + " bytes")
+    
+    let levels = [COMPRESS_LEVEL_FASTEST, COMPRESS_LEVEL_FAST, COMPRESS_LEVEL_DEFAULT, COMPRESS_LEVEL_BEST]
+    let level_names = ["FASTEST", "FAST", "DEFAULT", "BEST"]
+    
+    for (i = 0; i < length(levels); i++) {
+        let compressed = gzip_compress(data, length(data), levels[i])
+        if (compressed != null) {
+            let comp_size = get_compressed_size(compressed)
+            let ratio = get_compression_ratio(length(data), comp_size)
+            print(level_names[i] + ": " + comp_size + " bytes (" + (ratio * 100) + "%)")
+        } else {
+            print(level_names[i] + ": compression failed")
+        }
+    }
+}
+
+# Main execution
+function main() {
+    print("Kuyil Transcoder Utils Integration Demo")
+    print("=====================================")
+    
+    test_compression()
+    test_url_encoding()
+    test_html_encoding()  
+    test_hex_encoding()
+    test_crc32()
+    test_file_operations()
+    test_compression_levels()
+    
+    print("\n🎉 Transcoder utils demo completed!")
+    print("The transcoder library is now integrated with Kuyil and ready to use.")
+}
+
+# Run the demo
+main()
