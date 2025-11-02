@@ -113,6 +113,12 @@ void compress_stream_free(CompressStream* stream);
 const char* transcoder_get_last_error(void);
 void transcoder_clear_error(void);
 
+// Simple ZIP extraction helper
+// Extracts all files from zip_path into dest_dir (creates dirs as needed).
+// Returns a newly allocated string listing extracted file paths separated by newlines on success,
+// or NULL on failure (check transcoder_get_last_error()).
+char* unzip_to_directory(const char* zip_path, const char* dest_dir);
+
 #ifdef __cplusplus
 }
 #endif

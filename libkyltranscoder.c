@@ -255,3 +255,20 @@ Value decompress_zip(int arg_count, Value* args) {
     Value error = {VALUE_NIL};
     return error;
 }
+
+// ZIP: extract all files to directory, return newline-separated list of files
+Value transcode_unzip_to_directory(int arg_count, Value* args) {
+    Value vnil = {VALUE_NIL};
+    if (arg_count < 2 || args[0].type != VALUE_STRING || args[1].type != VALUE_STRING) {
+        return vnil;
+    }
+    const char* zip_path = args[0].as.string;
+    const char* dest_dir = args[1].as.string;
+    char* list = unzip_to_directory(zip_path, dest_dir);
+    if (!list) {
+        return vnil;
+    }
+    Value result = {VALUE_STRING};
+    result.as.string = list;
+    return result;
+}

@@ -1,10 +1,14 @@
+#define _XOPEN_SOURCE 600
 #include "transcoder_utils.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <zlib.h>
 #include <archive.h>
 #include <archive_entry.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 // Global error state
 static char g_transcoder_error[512] = {0};
@@ -537,4 +541,216 @@ const char* transcoder_get_last_error(void) {
 
 void transcoder_clear_error(void) {
     g_transcoder_error[0] = '\0';
+}
+
+// Ensure directory exists (mkdir -p like) for a given path
+static int ensure_directory_for_path(const char* fullpath) {
+    if (!fullpath) return -1;
+    char* path = strdup(fullpath);
+    if (!path) return -1;
+    // Turn trailing filename into directory path
+    char* p = strrchr(path, '/');
+    if (p) {
+        *p = '\0';
+    }
+    // Create directories recursively
+    char* iter = path;
+    if (iter[0] == '\0') { free(path); return 0; }
+    if (iter[0] == '/' ) iter++;
+    for (; *iter; ++iter) {
+        if (*iter == '/') {
+            *iter = '\0';
+            if (path[0] != '\0') {
+                if (mkdir(path, 0755) != 0 && errno != EEXIST) { *iter = '/'; free(path); return -1; }
+            }
+            *iter = '/';
+        }
+    }
+    if (mkdir(path, 0755) != 0 && errno != EEXIST) { free(path); return -1; }
+    free(path);
+    return 0;
+}
+
+// Copy data blocks from archive to disk writer
+static int copy_data(struct archive* ar, struct archive* aw) {
+    const void* buff;
+    size_t size;
+    la_int64_t offset;
+    int r;
+    for (;;) {
+        r = archive_read_data_block(ar, &buff, &size, &offset);
+        if (r == ARCHIVE_EOF) return ARCHIVE_OK;
+        if (r != ARCHIVE_OK) return r;
+        r = archive_write_data_block(aw, buff, size, offset);
+        if (r != ARCHIVE_OK) {
+            return r;
+        }
+    }
+}
+
+// Join two path segments into a newly allocated string
+static char* join_path(const char* a, const char* b) {
+    size_t la = strlen(a), lb = strlen(b);
+    int need_slash = (la > 0 && a[la-1] != '/');
+    char* out = (char*)malloc(la + need_slash + lb + 1);
+    if (!out) return NULL;
+    memcpy(out, a, la);
+    size_t pos = la;
+    if (need_slash) out[pos++] = '/';
+    memcpy(out + pos, b, lb);
+    out[pos + lb] = '\0';
+    return out;
+}
+
+// Append a line to a dynamically growing buffer (newline separated)
+static int append_line(char** buf, size_t* cap, size_t* len, const char* line) {
+    size_t ll = strlen(line);
+    size_t need = ll + 1; // plus newline
+    if (*cap < *len + need + 1) { // +1 for terminator
+        size_t ncap = (*cap == 0 ? 1024 : (*cap * 2));
+        while (ncap < *len + need + 1) ncap *= 2;
+        char* nbuf = (char*)realloc(*buf, ncap);
+        if (!nbuf) return -1;
+        *buf = nbuf;
+        *cap = ncap;
+    }
+    memcpy(*buf + *len, line, ll);
+    *len += ll;
+    (*buf)[(*len)++] = '\n';
+    (*buf)[*len] = '\0';
+    return 0;
+}
+
+// Public API: unzip entire archive to directory, return list of extracted files
+char* unzip_to_directory(const char* zip_path, const char* dest_dir) {
+    transcoder_clear_error();
+    // Debug: log input paths
+    FILE* dbg = fopen("/tmp/unzip_c_debug.txt", "a");
+    if (dbg) {
+        fprintf(dbg, "unzip_to_directory called with zip_path='%s', dest_dir='%s'\n", zip_path ? zip_path : "(null)", dest_dir ? dest_dir : "(null)");
+        fclose(dbg);
+    }
+    if (!zip_path || !dest_dir) {
+        set_transcoder_error("unzip_to_directory: invalid arguments");
+        return NULL;
+    }
+
+    struct archive* a = archive_read_new();
+    struct archive* ext = archive_write_disk_new();
+    struct archive_entry* entry;
+    char* out_list = NULL; size_t cap = 0, len = 0;
+
+    if (!a || !ext) {
+        set_transcoder_error("Failed to allocate archive structures");
+        if (a) archive_read_free(a);
+        if (ext) archive_write_free(ext);
+        return NULL;
+    }
+
+    archive_read_support_format_zip(a);
+    archive_read_support_filter_all(a);
+    archive_write_disk_set_options(ext, ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_ACL | ARCHIVE_EXTRACT_FFLAGS);
+
+    if (archive_read_open_filename(a, zip_path, 10240) != ARCHIVE_OK) {
+        set_transcoder_error("Failed to open ZIP file");
+        archive_read_free(a);
+        archive_write_free(ext);
+        return NULL;
+    }
+
+    // Ensure base dest dir exists
+    char* keep_path = join_path(dest_dir, ".keep");
+    if (!keep_path) {
+        set_transcoder_error("Out of memory while joining path");
+        archive_read_free(a);
+        archive_write_free(ext);
+        return NULL;
+    }
+    int dir_result = ensure_directory_for_path(keep_path);
+    free(keep_path);
+    if (dir_result != 0) {
+        set_transcoder_error("Failed to create destination directory");
+        archive_read_free(a);
+        archive_write_free(ext);
+        return NULL;
+    }
+
+    int r;
+    while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK) {
+        const char* current = archive_entry_pathname(entry);
+        if (!current) { archive_read_data_skip(a); continue; }
+        // Build full path under dest_dir
+        char* fullpath = join_path(dest_dir, current);
+        if (!fullpath) { set_transcoder_error("Out of memory"); archive_read_free(a); archive_write_free(ext); free(out_list); return NULL; }
+
+        // Make sure the directory for this entry exists
+        if (ensure_directory_for_path(fullpath) != 0) {
+            free(fullpath);
+            set_transcoder_error("Failed to create directory for entry");
+            archive_read_free(a);
+            archive_write_free(ext);
+            free(out_list);
+            return NULL;
+        }
+
+        // Override extraction path to our target
+        archive_entry_set_pathname(entry, fullpath);
+        r = archive_write_header(ext, entry);
+        if (r == ARCHIVE_OK) {
+            if (archive_entry_size(entry) > 0) {
+                r = copy_data(a, ext);
+                if (r != ARCHIVE_OK) {
+                    free(fullpath);
+                    set_transcoder_error("Failed to write entry data");
+                    archive_read_free(a);
+                    archive_write_free(ext);
+                    free(out_list);
+                    return NULL;
+                }
+            }
+            archive_write_finish_entry(ext);
+        } else {
+            // Failed to write header; skip entry
+            free(fullpath);
+            continue;
+        }
+
+        // Record only regular files in output list
+        mode_t ftype = archive_entry_filetype(entry);
+        if (ftype == AE_IFREG) {
+            // Convert fullpath to relative (dest_dir prefix removed) for listing readability
+            const char* rel = fullpath;
+            size_t ddlen = strlen(dest_dir);
+            if (strncmp(fullpath, dest_dir, ddlen) == 0) {
+                if (fullpath[ddlen] == '/') rel = fullpath + ddlen + 1; else if (fullpath[ddlen] == '\0') rel = fullpath + ddlen; else rel = fullpath;
+            }
+            // If rel is empty, still append fullpath
+            if (rel == NULL || *rel == '\0') rel = fullpath;
+            if (append_line(&out_list, &cap, &len, rel) != 0) {
+                free(fullpath);
+                set_transcoder_error("Out of memory while listing files");
+                archive_read_free(a);
+                archive_write_free(ext);
+                free(out_list);
+                return NULL;
+            }
+        }
+
+        free(fullpath);
+    }
+
+    archive_read_free(a);
+    archive_write_free(ext);
+
+    // Debug: log output list
+    dbg = fopen("/tmp/unzip_c_debug.txt", "a");
+    if (dbg) {
+        fprintf(dbg, "unzip_to_directory output list: '%s'\n", out_list ? out_list : "(null)");
+        fclose(dbg);
+    }
+    if (!out_list) {
+        // return empty string if nothing extracted
+        out_list = strdup("");
+    }
+    return out_list;
 }
