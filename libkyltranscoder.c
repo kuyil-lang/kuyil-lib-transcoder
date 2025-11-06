@@ -1,8 +1,26 @@
 // Kuyil Bridge for Transcoder Library
 #include "transcoder_utils.h"
-#include "../../src/vm.h"
+#include "../../src/ast.h"
 #include <string.h>
 #include <stdlib.h>
+
+// Kuyil interface signature metadata
+__attribute__((visibility("default")))
+const char* kyl_interface_signature_text = 
+    "compress compressGzip(input: string) -> object\n"
+    "compress compressDeflate(input: string) -> object\n"
+    "compress compressZip(input: string) -> string\n"
+    "decompress decompressGzip(input: object) -> string\n"
+    "decompress decompressDeflate(input: object) -> string\n"
+    "decompress decompressZip(input: string) -> string\n"
+    "transcode urlEncode(input: string) -> string\n"
+    "transcode urlDecode(input: string) -> string\n"
+    "transcode htmlEncode(input: string) -> string\n"
+    "transcode hexEncode(input: string) -> string\n"
+    "transcode hexDecode(input: string) -> string\n"
+    "transcode crc32(input: string) -> int32\n"
+    "transcode compressionRatio(original: int32, compressed: int32) -> float64\n"
+    "unzip toDirectory(zipPath: string) -> bool\n";
 
 // Wrapper functions to match Kuyil's expected naming
 
@@ -18,7 +36,7 @@ static char* kstrdup(const char* s) {
 }
 
 // GZIP compression - returns object with data (byte array) and length
-Value compress_gzip(int arg_count, Value* args) {
+Value compressGzip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -69,7 +87,7 @@ Value compress_gzip(int arg_count, Value* args) {
 }
 
 // GZIP decompression - expects object with data (byte array) and length
-Value decompress_gzip(int arg_count, Value* args) {
+Value decompressGzip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_OBJECT) {
         Value error = {VALUE_NIL};
         return error;
@@ -130,7 +148,7 @@ Value decompress_gzip(int arg_count, Value* args) {
 }
 
 // DEFLATE compression - returns object with data (byte array) and length
-Value compress_deflate(int arg_count, Value* args) {
+Value compressDeflate(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -181,7 +199,7 @@ Value compress_deflate(int arg_count, Value* args) {
 }
 
 // DEFLATE decompression - expects object with data (byte array) and length
-Value decompress_deflate(int arg_count, Value* args) {
+Value decompressDeflate(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_OBJECT) {
         Value error = {VALUE_NIL};
         return error;
@@ -242,7 +260,7 @@ Value decompress_deflate(int arg_count, Value* args) {
 }
 
 // URL encoding
-Value transcode_url_encode(int arg_count, Value* args) {
+Value urlEncode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -261,7 +279,7 @@ Value transcode_url_encode(int arg_count, Value* args) {
 }
 
 // URL decoding
-Value transcode_url_decode(int arg_count, Value* args) {
+Value urlDecode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -280,7 +298,7 @@ Value transcode_url_decode(int arg_count, Value* args) {
 }
 
 // HTML encoding
-Value transcode_html_encode(int arg_count, Value* args) {
+Value htmlEncode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -299,7 +317,7 @@ Value transcode_html_encode(int arg_count, Value* args) {
 }
 
 // Hex encoding
-Value transcode_hex_encode(int arg_count, Value* args) {
+Value hexEncode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -321,7 +339,7 @@ Value transcode_hex_encode(int arg_count, Value* args) {
 }
 
 // Hex decoding
-Value transcode_hex_decode(int arg_count, Value* args) {
+Value hexDecode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -341,7 +359,8 @@ Value transcode_hex_decode(int arg_count, Value* args) {
 }
 
 // CRC32 checksum
-Value transcode_crc32(int arg_count, Value* args) {
+// NOTE: Avoid symbol collision with zlib's crc32 by exporting as kyl_crc32
+Value kyl_crc32(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NUMBER};
         error.as.number = 0;
@@ -359,7 +378,7 @@ Value transcode_crc32(int arg_count, Value* args) {
 }
 
 // Get compression ratio
-Value transcode_compression_ratio(int arg_count, Value* args) {
+Value compressionRatio(int arg_count, Value* args) {
     if (arg_count < 2 || args[0].type != VALUE_NUMBER || args[1].type != VALUE_NUMBER) {
         Value error = {VALUE_NUMBER};
         error.as.number = 0.0;
@@ -378,7 +397,7 @@ Value transcode_compression_ratio(int arg_count, Value* args) {
 
 // Dummy functions for compatibility
 // Compress a string to a zip archive (returns zip data as string)
-Value compress_zip(int arg_count, Value* args) {
+Value compressZip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -412,7 +431,7 @@ Value compress_zip(int arg_count, Value* args) {
 }
 
 // Decompress zip data and return the first file's contents as string
-Value decompress_zip(int arg_count, Value* args) {
+Value decompressZip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -453,7 +472,7 @@ Value decompress_zip(int arg_count, Value* args) {
 
 // ZIP: extract all files to directory, return newline-separated list of files
 // Unzip a zip file to a directory, return true if successful
-Value transcode_unzip_to_directory(int arg_count, Value* args) {
+Value toDirectory(int arg_count, Value* args) {
     Value vfalse = {VALUE_BOOL};
     vfalse.as.boolean = false;
     if (arg_count < 2 || args[0].type != VALUE_STRING || args[1].type != VALUE_STRING) {
