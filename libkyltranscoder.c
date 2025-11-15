@@ -1,8 +1,10 @@
 // Kuyil Bridge for Transcoder Library
+#include <stdio.h>
 #include "transcoder_utils.h"
 #include "../../src/ast.h"
 #include <string.h>
 #include <stdlib.h>
+static char* json_get_field_impl(const char* json, const char* key);
 
 // Kuyil interface signature metadata
 __attribute__((visibility("default")))
@@ -20,6 +22,7 @@ const char* kyl_interface_signature_text =
     "transcode hexDecode(input: string) -> string\n"
     "transcode crc32(input: string) -> int32\n"
     "transcode compressionRatio(original: int32, compressed: int32) -> float64\n"
+    "transcode jsonGetField(json: string, key: string) -> string\n"
     "unzip toDirectory(zipPath: string) -> bool\n";
 
 // Wrapper functions to match Kuyil's expected naming
@@ -36,7 +39,7 @@ static char* kstrdup(const char* s) {
 }
 
 // GZIP compression - returns object with data (byte array) and length
-Value compressGzip(int arg_count, Value* args) {
+Value compress_compressGzip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -87,7 +90,7 @@ Value compressGzip(int arg_count, Value* args) {
 }
 
 // GZIP decompression - expects object with data (byte array) and length
-Value decompressGzip(int arg_count, Value* args) {
+Value decompress_decompressGzip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_OBJECT) {
         Value error = {VALUE_NIL};
         return error;
@@ -148,7 +151,7 @@ Value decompressGzip(int arg_count, Value* args) {
 }
 
 // DEFLATE compression - returns object with data (byte array) and length
-Value compressDeflate(int arg_count, Value* args) {
+Value compress_compressDeflate(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -199,7 +202,7 @@ Value compressDeflate(int arg_count, Value* args) {
 }
 
 // DEFLATE decompression - expects object with data (byte array) and length
-Value decompressDeflate(int arg_count, Value* args) {
+Value decompress_decompressDeflate(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_OBJECT) {
         Value error = {VALUE_NIL};
         return error;
@@ -260,7 +263,7 @@ Value decompressDeflate(int arg_count, Value* args) {
 }
 
 // URL encoding
-Value urlEncode(int arg_count, Value* args) {
+Value transcode_urlEncode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -279,7 +282,7 @@ Value urlEncode(int arg_count, Value* args) {
 }
 
 // URL decoding
-Value urlDecode(int arg_count, Value* args) {
+Value transcode_urlDecode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -298,7 +301,7 @@ Value urlDecode(int arg_count, Value* args) {
 }
 
 // HTML encoding
-Value htmlEncode(int arg_count, Value* args) {
+Value transcode_htmlEncode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -317,7 +320,7 @@ Value htmlEncode(int arg_count, Value* args) {
 }
 
 // Hex encoding
-Value hexEncode(int arg_count, Value* args) {
+Value transcode_hexEncode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -339,7 +342,7 @@ Value hexEncode(int arg_count, Value* args) {
 }
 
 // Hex decoding
-Value hexDecode(int arg_count, Value* args) {
+Value transcode_hexDecode(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -360,7 +363,7 @@ Value hexDecode(int arg_count, Value* args) {
 
 // CRC32 checksum
 // NOTE: Avoid symbol collision with zlib's crc32 by exporting as kyl_crc32
-Value kyl_crc32(int arg_count, Value* args) {
+Value transcode_crc32(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NUMBER};
         error.as.number = 0;
@@ -378,7 +381,7 @@ Value kyl_crc32(int arg_count, Value* args) {
 }
 
 // Get compression ratio
-Value compressionRatio(int arg_count, Value* args) {
+Value transcode_compressionRatio(int arg_count, Value* args) {
     if (arg_count < 2 || args[0].type != VALUE_NUMBER || args[1].type != VALUE_NUMBER) {
         Value error = {VALUE_NUMBER};
         error.as.number = 0.0;
@@ -395,9 +398,36 @@ Value compressionRatio(int arg_count, Value* args) {
     return result;
 }
 
+// JSON get field - extracts string value for a key from flat JSON
+Value transcode_jsonGetField(int arg_count, Value* args) {
+    printf("[DEBUG transcode_jsonGetField] arg_count=%d\n", arg_count);
+    if (arg_count >= 1) printf("[DEBUG] args[0].type=%d\n", args[0].type);
+    if (arg_count >= 2) printf("[DEBUG] args[1].type=%d\n", args[1].type);
+    if (arg_count < 2 || args[0].type != VALUE_STRING || args[1].type != VALUE_STRING) {
+        Value result = {VALUE_STRING};
+        result.as.string = kstrdup("");
+        return result;
+    }
+    
+    const char* json = args[0].as.string;
+    const char* key = args[1].as.string;
+    
+    char* value = json_get_field_impl(json, key);
+    
+    if (!value) {
+        Value result = {VALUE_STRING};
+        result.as.string = kstrdup("");
+        return result;
+    }
+    
+    Value result = {VALUE_STRING};
+    result.as.string = value;
+    return result;
+}
+
 // Dummy functions for compatibility
 // Compress a string to a zip archive (returns zip data as string)
-Value compressZip(int arg_count, Value* args) {
+Value compress_compressZip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -431,7 +461,7 @@ Value compressZip(int arg_count, Value* args) {
 }
 
 // Decompress zip data and return the first file's contents as string
-Value decompressZip(int arg_count, Value* args) {
+Value decompress_decompressZip(int arg_count, Value* args) {
     if (arg_count < 1 || args[0].type != VALUE_STRING) {
         Value error = {VALUE_NIL};
         return error;
@@ -472,7 +502,7 @@ Value decompressZip(int arg_count, Value* args) {
 
 // ZIP: extract all files to directory, return newline-separated list of files
 // Unzip a zip file to a directory, return true if successful
-Value toDirectory(int arg_count, Value* args) {
+Value unzip_toDirectory(int arg_count, Value* args) {
     Value vfalse = {VALUE_BOOL};
     vfalse.as.boolean = false;
     if (arg_count < 2 || args[0].type != VALUE_STRING || args[1].type != VALUE_STRING) {
@@ -505,4 +535,36 @@ Value toDirectory(int arg_count, Value* args) {
     Value vret = {VALUE_BOOL};
     vret.as.boolean = all_ok;
     return vret;
+}
+
+// Local JSON field extractor (flat JSON, no escaped quotes)
+static char* json_get_field_impl(const char* json, const char* key) {
+    if (!json || !key) {
+        return NULL;
+    }
+    size_t key_len = strlen(key);
+    size_t marker_len = key_len + 4; // "key":"
+    char* marker = (char*)malloc(marker_len + 1);
+    if (!marker) {
+        return NULL;
+    }
+    snprintf(marker, marker_len + 1, "\"%s\":\"", key);
+    const char* start = strstr(json, marker);
+    free(marker);
+    if (!start) {
+        return kstrdup("");
+    }
+    start += marker_len;
+    const char* end = start;
+    while (*end && *end != '"') {
+        end++;
+    }
+    size_t value_len = (size_t)(end - start);
+    char* out = (char*)malloc(value_len + 1);
+    if (!out) {
+        return NULL;
+    }
+    memcpy(out, start, value_len);
+    out[value_len] = '\0';
+    return out;
 }

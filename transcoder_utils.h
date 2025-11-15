@@ -82,6 +82,8 @@ char* html_decode(const char* encoded_data);
 char* json_escape(const char* data);
 char* json_unescape(const char* escaped_data);
 
+// JSON Field Extraction (simple string field getter)
+
 // Hex Encoding/Decoding
 char* hex_encode(const char* data, size_t length);
 char* hex_decode(const char* hex_data, size_t* output_length);

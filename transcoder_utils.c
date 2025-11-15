@@ -501,6 +501,55 @@ char* hex_decode(const char* hex_data, size_t* output_length) {
     return data;
 }
 
+// JSON Field Extraction - simple key:"value" string getter for flat JSON
+static char* json_get_field(const char* json, const char* key) {
+    if (!json || !key) {
+        set_transcoder_error("Invalid parameters for json_get_field");
+        return NULL;
+    }
+    
+    // Build search pattern: "key":"
+    size_t key_len = strlen(key);
+    size_t marker_len = key_len + 4; // quotes around key + colon + quote
+    char* marker = malloc(marker_len + 1);
+    if (!marker) {
+        set_transcoder_error("Memory allocation failed");
+        return NULL;
+    }
+    snprintf(marker, marker_len + 1, "\"%s\":\"", key);
+    
+    // Find the marker in JSON
+    const char* start = strstr(json, marker);
+    free(marker);
+    
+    if (!start) {
+        // Key not found
+        return strdup("");
+    }
+    
+    // Move past the marker to the value start
+    start += marker_len;
+    
+    // Find the closing quote (simple implementation, doesn't handle escaped quotes)
+    const char* end = start;
+    while (*end && *end != '"') {
+        end++;
+    }
+    
+    // Extract the value
+    size_t value_len = end - start;
+    char* value = malloc(value_len + 1);
+    if (!value) {
+        set_transcoder_error("Memory allocation failed");
+        return NULL;
+    }
+    
+    memcpy(value, start, value_len);
+    value[value_len] = '\0';
+    
+    return value;
+}
+
 // CRC32 Checksum
 uint32_t crc32_checksum(const char* data, size_t length) {
     return crc32(0L, (const Bytef*)data, length);
