@@ -69,7 +69,9 @@ Value compress_compressGzip(int arg_count, Value* args) {
     }
     
     // Create object with data and length fields
-    Value result = {VALUE_OBJECT};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_OBJECT;
     result.as.object.count = 2;
     result.as.object.keys = malloc(2 * sizeof(char*));
     result.as.object.values = malloc(2 * sizeof(Value));
@@ -145,7 +147,9 @@ Value decompress_decompressGzip(int arg_count, Value* args) {
     decompressed[output_length] = '\0';
     free(raw);
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = decompressed;
     return result;
 }
@@ -181,7 +185,9 @@ Value compress_compressDeflate(int arg_count, Value* args) {
     }
     
     // Create object with data and length fields
-    Value result = {VALUE_OBJECT};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_OBJECT;
     result.as.object.count = 2;
     result.as.object.keys = malloc(2 * sizeof(char*));
     result.as.object.values = malloc(2 * sizeof(Value));
@@ -257,7 +263,9 @@ Value decompress_decompressDeflate(int arg_count, Value* args) {
     decompressed[output_length] = '\0';
     free(raw);
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = decompressed;
     return result;
 }
@@ -276,7 +284,9 @@ Value transcode_urlEncode(int arg_count, Value* args) {
         return error;
     }
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = encoded;
     return result;
 }
@@ -295,7 +305,9 @@ Value transcode_urlDecode(int arg_count, Value* args) {
         return error;
     }
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = decoded;
     return result;
 }
@@ -314,7 +326,9 @@ Value transcode_htmlEncode(int arg_count, Value* args) {
         return error;
     }
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = encoded;
     return result;
 }
@@ -336,7 +350,9 @@ Value transcode_hexEncode(int arg_count, Value* args) {
         return error;
     }
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = encoded;
     return result;
 }
@@ -356,7 +372,9 @@ Value transcode_hexDecode(int arg_count, Value* args) {
         return error;
     }
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = decoded;
     return result;
 }
@@ -375,7 +393,9 @@ Value transcode_crc32(int arg_count, Value* args) {
     
     uint32_t checksum = crc32_checksum(data, length);
     
-    Value result = {VALUE_NUMBER};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_NUMBER;
     result.as.number = (double)checksum;
     return result;
 }
@@ -393,7 +413,9 @@ Value transcode_compressionRatio(int arg_count, Value* args) {
     
     double ratio = get_compression_ratio(original_size, compressed_size);
     
-    Value result = {VALUE_NUMBER};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_NUMBER;
     result.as.number = ratio;
     return result;
 }
@@ -404,7 +426,9 @@ Value transcode_jsonGetField(int arg_count, Value* args) {
     if (arg_count >= 1) printf("[DEBUG] args[0].type=%d\n", args[0].type);
     if (arg_count >= 2) printf("[DEBUG] args[1].type=%d\n", args[1].type);
     if (arg_count < 2 || args[0].type != VALUE_STRING || args[1].type != VALUE_STRING) {
-        Value result = {VALUE_STRING};
+        Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
         result.as.string = kstrdup("");
         return result;
     }
@@ -415,12 +439,16 @@ Value transcode_jsonGetField(int arg_count, Value* args) {
     char* value = json_get_field_impl(json, key);
     
     if (!value) {
-        Value result = {VALUE_STRING};
+        Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
         result.as.string = kstrdup("");
         return result;
     }
     
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = value;
     return result;
 }
@@ -455,7 +483,9 @@ Value compress_compressZip(int arg_count, Value* args) {
         Value error = {VALUE_NIL};
         return error;
     }
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = zip_data;
     return result;
 }
@@ -495,7 +525,9 @@ Value decompress_decompressZip(int arg_count, Value* args) {
         Value error = {VALUE_NIL};
         return error;
     }
-    Value result = {VALUE_STRING};
+    Value result;
+    memset(&result, 0, sizeof(Value));
+    result.type = VALUE_STRING;
     result.as.string = file_data;
     return result;
 }
